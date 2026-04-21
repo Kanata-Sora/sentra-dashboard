@@ -68,17 +68,6 @@ create table if not exists knowledge (
 );
 
 -- ============================================================
--- 6. スナップショット
--- ============================================================
-create table if not exists snapshots (
-  id uuid primary key default gen_random_uuid(),
-  title text not null,
-  generated_summary text not null,           -- LLMが生成したサマリーJSON文字列
-  snapshot_data jsonb not null,              -- 生成時点の全プロジェクト状態（JSON）
-  created_at timestamptz default now()
-);
-
--- ============================================================
 -- 初期データ：3プロジェクト
 -- ============================================================
 insert into projects (name, description, color, sort_order) values
@@ -96,8 +85,6 @@ alter table members enable row level security;
 alter table minutes enable row level security;
 alter table tasks enable row level security;
 alter table knowledge enable row level security;
-alter table snapshots enable row level security;
-
 -- 全テーブルを全ユーザーに公開（プロトタイプ用）
 create policy "public_read_projects" on projects for select using (true);
 create policy "public_write_projects" on projects for all using (true);
@@ -114,5 +101,3 @@ create policy "public_write_tasks" on tasks for all using (true);
 create policy "public_read_knowledge" on knowledge for select using (true);
 create policy "public_write_knowledge" on knowledge for all using (true);
 
-create policy "public_read_snapshots" on snapshots for select using (true);
-create policy "public_write_snapshots" on snapshots for all using (true);

@@ -52,46 +52,6 @@ export interface Knowledge {
   created_at: string;
 }
 
-export interface Snapshot {
-  id: string;
-  title: string;
-  generated_summary: string;
-  snapshot_data: SnapshotData;
-  created_at: string;
-}
-
-// LLMが生成するスナップショットのJSON構造
-export interface SnapshotSummary {
-  main_catch: string;
-  sub_title: string;
-  overview: string;
-  projects: ProjectSummary[];
-  tech_foundation: string[];
-  action_hook: string;
-}
-
-export interface ProjectSummary {
-  name: string;
-  vision: string;
-  before: string;
-  after: string;
-  key_metric: string;
-  stats: {
-    done: number;
-    in_progress: number;
-    open: number;
-  };
-}
-
-export interface SnapshotData {
-  projects: Array<{
-    id: string;
-    name: string;
-    color: string | null;
-    tasks: Task[];
-  }>;
-}
-
 // LLM解析結果の型
 export interface AnalysisResult {
   tasks: Array<{

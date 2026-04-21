@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Upload, Library, Camera } from "lucide-react";
+import { LayoutDashboard, Upload, Library } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/upload", label: "アップロード", icon: Upload },
   { href: "/knowledge", label: "ナレッジベース", icon: Library },
-  { href: "/snapshot", label: "スナップショット", icon: Camera },
 ];
 
 export default function Header() {
