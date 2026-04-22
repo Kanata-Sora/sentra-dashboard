@@ -7,7 +7,7 @@ const client = new Anthropic({
 export async function callLLM(prompt: string): Promise<string> {
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2048,
+    max_tokens: 8192, // 議事録が長い場合でも途中で切れないよう上限を拡大
     messages: [{ role: "user", content: prompt }],
   });
 
