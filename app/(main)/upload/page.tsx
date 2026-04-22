@@ -2,16 +2,29 @@
 
 import { useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { Project, Task, Knowledge, AnalysisResult, TaskStatus, KnowledgeCategory } from "@/types/database";
+import { Project, AnalysisResult, TaskStatus, KnowledgeCategory } from "@/types/database";
 import { cn, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS } from "@/lib/utils";
-import { Upload, FileText, Loader2, CheckCircle, Trash2, Plus } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle, Trash2, Plus, Timer } from "lucide-react";
 import { useEffect } from "react";
 
-type EditableTask = AnalysisResult["tasks"][number] & { _id: string };
+// 編集可能なタスク型（is_long_term・due_date を追加）
+type EditableTask = AnalysisResult["tasks"][number] & {
+  _id: string;
+  is_long_term: boolean;
+  due_date: string | null;
+};
+
 type EditableKnowledge = AnalysisResult["knowledge"][number] & { _id: string };
 
 function generateId() {
   return Math.random().toString(36).slice(2);
+}
+
+// 日付とプロジェクト名からタイトルを自動生成する関数
+function generateTitle(date: string, projectId: string, projects: Project[]): string {
+  const project = projects.find((p) => p.id === projectId);
+  const projectName = project?.name || "全体会議";
+  return `${date} ${projectName}`;
 }
 
 export default function UploadPage() {
@@ -20,7 +33,6 @@ export default function UploadPage() {
   const [meetingDate, setMeetingDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [title, setTitle] = useState("");
   const [rawText, setRawText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -62,8 +74,10 @@ export default function UploadPage() {
     setError(null);
     setHasResult(false);
 
-    const selectedProject = projects.find((p) => p.id === selectedProjectId);
-    const projectName = selectedProject?.name || "全体会議";
+    const projectName =
+      selectedProjectId === "all"
+        ? "全体会議"
+        : projects.find((p) => p.id === selectedProjectId)?.name || "全体会議";
 
     try {
       const res = await fetch("/api/analyze", {
@@ -75,15 +89,26 @@ export default function UploadPage() {
 
       if (!res.ok) throw new Error(data.error || "解析に失敗しました");
       if (data.parse_error) {
-        setError("LLMのレスポンスをJSONとして解析できませんでした。生レスポンス: " + data.raw_response);
+        setError(
+          "LLMのレスポンスをJSONとして解析できませんでした。生レスポンス: " + data.raw_response
+        );
         return;
       }
 
+      // is_long_term・due_dateを初期値falseとnullで追加
       setEditableTasks(
-        (data.tasks || []).map((t: AnalysisResult["tasks"][number]) => ({ ...t, _id: generateId() }))
+        (data.tasks || []).map((t: AnalysisResult["tasks"][number]) => ({
+          ...t,
+          _id: generateId(),
+          is_long_term: false,
+          due_date: null,
+        }))
       );
       setEditableKnowledge(
-        (data.knowledge || []).map((k: AnalysisResult["knowledge"][number]) => ({ ...k, _id: generateId() }))
+        (data.knowledge || []).map((k: AnalysisResult["knowledge"][number]) => ({
+          ...k,
+          _id: generateId(),
+        }))
       );
       setHasResult(true);
     } catch (e) {
@@ -94,19 +119,18 @@ export default function UploadPage() {
   }
 
   async function handleSave() {
-    if (!title.trim()) {
-      setError("議事録タイトルを入力してください");
-      return;
-    }
     setSaving(true);
     setError(null);
+
+    // タイトルを自動生成
+    const autoTitle = generateTitle(meetingDate, selectedProjectId, projects);
 
     try {
       // 議事録を保存
       const { data: minuteData, error: mError } = await supabase
         .from("minutes")
         .insert({
-          title,
+          title: autoTitle,
           meeting_date: meetingDate,
           raw_text: rawText,
           project_id: selectedProjectId === "all" ? null : selectedProjectId,
@@ -120,13 +144,15 @@ export default function UploadPage() {
       const projectId = selectedProjectId === "all" ? null : selectedProjectId;
 
       if (!projectId) {
-        setError("タスク・ナレッジ保存にはプロジェクトを選択してください（「全体会議」は議事録のみ保存されます）");
+        setError(
+          "タスク・ナレッジ保存にはプロジェクトを選択してください（「全体会議」は議事録のみ保存されます）"
+        );
         setSaved(true);
         setSaving(false);
         return;
       }
 
-      // タスクを保存
+      // タスクを保存（is_long_term・due_dateを含む）
       if (editableTasks.length > 0) {
         const tasksToInsert = editableTasks.map((t) => ({
           project_id: projectId,
@@ -135,6 +161,8 @@ export default function UploadPage() {
           description: t.description,
           status: t.status,
           assigned_to: t.assigned_to,
+          is_long_term: t.is_long_term,
+          due_date: t.due_date || null,
         }));
         const { error: tError } = await supabase.from("tasks").insert(tasksToInsert);
         if (tError) throw tError;
@@ -160,7 +188,6 @@ export default function UploadPage() {
       setEditableKnowledge([]);
       setRawText("");
       setFileName(null);
-      setTitle("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -195,18 +222,7 @@ export default function UploadPage() {
         <h2 className="font-semibold text-gray-900 mb-4">議事録情報</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              タイトル <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="例: 第12回定例会議"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-          </div>
+          {/* 会議日 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               会議日
@@ -218,24 +234,31 @@ export default function UploadPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
+
+          {/* 対象プロジェクト */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              対象プロジェクト
+            </label>
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="all">全体会議</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            対象プロジェクト
-          </label>
-          <select
-            value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          >
-            <option value="all">全体会議</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+        {/* タイトルプレビュー */}
+        <div className="mb-4 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-600">
+          <span className="text-gray-400 text-xs mr-2">保存タイトル：</span>
+          {generateTitle(meetingDate, selectedProjectId, projects)}
         </div>
 
         {/* ファイルアップロード */}
@@ -326,6 +349,8 @@ export default function UploadPage() {
                       description: "",
                       status: "open",
                       assigned_to: null,
+                      is_long_term: false,
+                      due_date: null,
                     },
                   ])
                 }
@@ -337,12 +362,16 @@ export default function UploadPage() {
             </div>
 
             <div className="space-y-3">
-              {editableTasks.map((task, i) => (
+              {editableTasks.map((task) => (
                 <div
                   key={task._id}
-                  className="border border-gray-100 rounded-lg p-3 space-y-2"
+                  className={cn(
+                    "border rounded-lg p-3 space-y-2",
+                    task.is_long_term ? "border-orange-200 bg-orange-50" : "border-gray-100"
+                  )}
                 >
-                  <div className="flex gap-2">
+                  {/* 1行目：タイトル・ステータス・長期マーク・削除 */}
+                  <div className="flex gap-2 items-center">
                     <input
                       value={task.title}
                       onChange={(e) =>
@@ -375,6 +404,28 @@ export default function UploadPage() {
                       <option value="in_progress">進行中</option>
                       <option value="done">完了</option>
                     </select>
+
+                    {/* 長期タスクトグル */}
+                    <button
+                      onClick={() =>
+                        setEditableTasks((prev) =>
+                          prev.map((t) =>
+                            t._id === task._id ? { ...t, is_long_term: !t.is_long_term } : t
+                          )
+                        )
+                      }
+                      title="長期タスクとしてマーク"
+                      className={cn(
+                        "flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium transition-colors",
+                        task.is_long_term
+                          ? "bg-orange-100 text-orange-600 border border-orange-300"
+                          : "bg-gray-100 text-gray-400 border border-gray-200 hover:bg-orange-50 hover:text-orange-400"
+                      )}
+                    >
+                      <Timer className="w-3 h-3" />
+                      長期
+                    </button>
+
                     <button
                       onClick={() =>
                         setEditableTasks((prev) => prev.filter((t) => t._id !== task._id))
@@ -384,8 +435,10 @@ export default function UploadPage() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
+
+                  {/* 2行目：詳細（スクロール可）・担当者 */}
                   <div className="flex gap-2">
-                    <input
+                    <textarea
                       value={task.description || ""}
                       onChange={(e) =>
                         setEditableTasks((prev) =>
@@ -395,7 +448,8 @@ export default function UploadPage() {
                         )
                       }
                       placeholder="詳細 (任意)"
-                      className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      rows={2}
+                      className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400 resize-none overflow-y-auto max-h-24"
                     />
                     <input
                       value={task.assigned_to || ""}
@@ -410,6 +464,25 @@ export default function UploadPage() {
                       }
                       placeholder="担当者 (任意)"
                       className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    />
+                  </div>
+
+                  {/* 3行目：期限（カレンダーピッカー） */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500 shrink-0">期限：</label>
+                    <input
+                      type="date"
+                      value={task.due_date || ""}
+                      onChange={(e) =>
+                        setEditableTasks((prev) =>
+                          prev.map((t) =>
+                            t._id === task._id
+                              ? { ...t, due_date: e.target.value || null }
+                              : t
+                          )
+                        )
+                      }
+                      className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
                     />
                   </div>
                 </div>
