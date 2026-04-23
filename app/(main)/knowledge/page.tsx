@@ -253,7 +253,7 @@ export default function KnowledgePage() {
                 生成された解説
               </span>
               <button
-                onClick={() => setChatAnswer(null)}
+                onClick={() => { setChatAnswer(null); setChatQuery(""); }}
                 className="text-gray-300 hover:text-gray-500"
               >
                 <X className="w-4 h-4" />

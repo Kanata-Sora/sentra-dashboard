@@ -34,6 +34,21 @@ export default function DashboardPage() {
   // タスク詳細アコーディオンの開閉管理
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
+  // 各プロジェクトの「完了したタスク」セクションの開閉管理
+  const [expandedDoneProjects, setExpandedDoneProjects] = useState<Set<string>>(new Set());
+
+  function toggleDoneSection(projectId: string) {
+    setExpandedDoneProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      return next;
+    });
+  }
+
   // タスク新規追加フォームの管理
   const [showForm, setShowForm] = useState(false);
   const [formProjectId, setFormProjectId] = useState("");
@@ -401,103 +416,136 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* タスク一覧 */}
-                  <div className="space-y-2">
-                    {total === 0 ? (
-                      <p className="text-center text-gray-400 text-xs py-4">
-                        タスクがありません
-                      </p>
-                    ) : (
-                      [...statusOrder]
-                        .flatMap((status) =>
-                          project.tasks.filter((t) => t.status === status)
-                        )
-                        .map((task) => (
-                          <div
-                            key={task.id}
-                            className={cn(
-                              "border rounded-lg overflow-hidden transition-colors",
-                              task.is_long_term
-                                ? "border-orange-200 bg-orange-50"
-                                : "border-gray-100"
-                            )}
-                          >
-                            {/* タスクヘッダー行（クリックで詳細開閉） */}
-                            <div
-                              className="flex items-start justify-between gap-2 p-3 cursor-pointer hover:bg-black/5 transition-colors"
-                              onClick={() =>
-                                setExpandedTaskId(
-                                  expandedTaskId === task.id ? null : task.id
-                                )
-                              }
-                            >
-                              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                {/* 長期タスクバッジ */}
-                                {task.is_long_term && (
-                                  <span className="shrink-0 flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 font-medium">
-                                    <Timer className="w-3 h-3" />
-                                    長期
-                                  </span>
-                                )}
-                                <p className="text-sm text-gray-800 font-medium leading-snug truncate">
-                                  {task.title}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation(); // アコーディオンの開閉を防ぐ
-                                    updateTaskStatus(task.id, task.status);
-                                  }}
-                                  disabled={updating === task.id}
-                                  className={cn(
-                                    "text-xs px-2 py-0.5 rounded-full font-medium transition-all",
-                                    STATUS_COLORS[task.status],
-                                    updating === task.id && "opacity-50 cursor-not-allowed"
-                                  )}
-                                  title="クリックでステータス変更"
-                                >
-                                  {updating === task.id ? "..." : STATUS_LABELS[task.status]}
-                                </button>
-                                {expandedTaskId === task.id ? (
-                                  <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
-                                ) : (
-                                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                                )}
-                              </div>
-                            </div>
+                  {/* タスク一覧（完了以外） */}
+                  {(() => {
+                    const activeTasks = ["in_progress", "open"].flatMap((status) =>
+                      project.tasks.filter((t) => t.status === status)
+                    );
+                    const doneTasks = project.tasks.filter((t) => t.status === "done");
+                    const isDoneOpen = expandedDoneProjects.has(project.id);
 
-                            {/* 詳細エリア（展開時のみ表示） */}
-                            {expandedTaskId === task.id && (
-                              <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-1.5">
-                                {task.description && (
-                                  <p className="text-xs text-gray-600 whitespace-pre-wrap">
-                                    {task.description}
-                                  </p>
-                                )}
-                                <div className="flex flex-wrap gap-3 text-xs text-gray-400">
-                                  {task.assigned_to && (
-                                    <span className="flex items-center gap-1">
-                                      <User className="w-3 h-3" />
-                                      {task.assigned_to}
-                                    </span>
-                                  )}
-                                  {task.due_date && (
-                                    <span className="flex items-center gap-1">
-                                      <Calendar className="w-3 h-3" />
-                                      {task.due_date}
-                                    </span>
-                                  )}
-                                  {!task.description && !task.assigned_to && !task.due_date && (
-                                    <span className="text-gray-300">詳細情報なし</span>
-                                  )}
-                                </div>
-                              </div>
+                    // タスクカードの共通レンダラー
+                    const renderTask = (task: Task) => (
+                      <div
+                        key={task.id}
+                        className={cn(
+                          "border rounded-lg overflow-hidden transition-colors",
+                          task.is_long_term
+                            ? "border-orange-200 bg-orange-50"
+                            : "border-gray-100"
+                        )}
+                      >
+                        <div
+                          className="flex items-start justify-between gap-2 p-3 cursor-pointer hover:bg-black/5 transition-colors"
+                          onClick={() =>
+                            setExpandedTaskId(expandedTaskId === task.id ? null : task.id)
+                          }
+                        >
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                            {task.is_long_term && (
+                              <span className="shrink-0 flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 font-medium">
+                                <Timer className="w-3 h-3" />
+                                長期
+                              </span>
+                            )}
+                            <p className="text-sm text-gray-800 font-medium leading-snug truncate">
+                              {task.title}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateTaskStatus(task.id, task.status);
+                              }}
+                              disabled={updating === task.id}
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full font-medium transition-all",
+                                STATUS_COLORS[task.status],
+                                updating === task.id && "opacity-50 cursor-not-allowed"
+                              )}
+                              title="クリックでステータス変更"
+                            >
+                              {updating === task.id ? "..." : STATUS_LABELS[task.status]}
+                            </button>
+                            {expandedTaskId === task.id ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
                             )}
                           </div>
-                        ))
-                    )}
-                  </div>
+                        </div>
+                        {expandedTaskId === task.id && (
+                          <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-1.5">
+                            {task.description && (
+                              <p className="text-xs text-gray-600 whitespace-pre-wrap">
+                                {task.description}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+                              {task.assigned_to && (
+                                <span className="flex items-center gap-1">
+                                  <User className="w-3 h-3" />
+                                  {task.assigned_to}
+                                </span>
+                              )}
+                              {task.due_date && (
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {task.due_date}
+                                </span>
+                              )}
+                              {!task.description && !task.assigned_to && !task.due_date && (
+                                <span className="text-gray-300">詳細情報なし</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+
+                    return (
+                      <div className="space-y-2">
+                        {total === 0 ? (
+                          <p className="text-center text-gray-400 text-xs py-4">
+                            タスクがありません
+                          </p>
+                        ) : (
+                          <>
+                            {activeTasks.length === 0 && (
+                              <p className="text-center text-gray-300 text-xs py-2">
+                                進行中・未着手のタスクはありません
+                              </p>
+                            )}
+                            {activeTasks.map(renderTask)}
+
+                            {/* 完了したタスクセクション */}
+                            {doneTasks.length > 0 && (
+                              <div className="mt-1">
+                                <button
+                                  onClick={() => toggleDoneSection(project.id)}
+                                  className="flex items-center gap-1.5 w-full text-xs text-gray-400 hover:text-gray-600 py-1.5 transition-colors"
+                                >
+                                  {isDoneOpen ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  )}
+                                  <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+                                  完了したタスク（{doneTasks.length}件）
+                                </button>
+                                {isDoneOpen && (
+                                  <div className="space-y-2 mt-1">
+                                    {doneTasks.map(renderTask)}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );
