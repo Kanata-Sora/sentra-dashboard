@@ -17,6 +17,7 @@ import {
   X,
   Loader2,
   Timer,
+  Pencil,
 } from "lucide-react";
 
 interface ProjectWithTasks extends Project {
@@ -61,6 +62,18 @@ export default function DashboardPage() {
   const [formIsLongTerm, setFormIsLongTerm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // タスク編集フォームの管理
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editProjectId, setEditProjectId] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editStatus, setEditStatus] = useState<TaskStatus>("open");
+  const [editAssignedTo, setEditAssignedTo] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editIsLongTerm, setEditIsLongTerm] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   async function fetchData() {
     setLoading(true);
@@ -169,6 +182,53 @@ export default function DashboardPage() {
       setFormError(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // 編集フォームを開く（タスクの現在値をセット）
+  function openEditTask(task: Task) {
+    setEditingTaskId(task.id);
+    setEditProjectId(task.project_id);
+    setEditTitle(task.title);
+    setEditDescription(task.description || "");
+    setEditStatus(task.status);
+    setEditAssignedTo(task.assigned_to || "");
+    setEditDueDate(task.due_date || "");
+    setEditIsLongTerm(task.is_long_term);
+    setEditError(null);
+    // アコーディオンを開く
+    setExpandedTaskId(task.id);
+  }
+
+  // タスクを更新して保存
+  async function handleUpdateTask() {
+    if (!editTitle.trim()) {
+      setEditError("タスク名を入力してください");
+      return;
+    }
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          title: editTitle,
+          description: editDescription || null,
+          status: editStatus,
+          assigned_to: editAssignedTo || null,
+          due_date: editDueDate || null,
+          is_long_term: editIsLongTerm,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingTaskId!);
+      if (error) throw error;
+      setEditingTaskId(null);
+      setExpandedTaskId(null);
+      await fetchData();
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : "更新に失敗しました");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -468,11 +528,13 @@ export default function DashboardPage() {
                             : "border-gray-100"
                         )}
                       >
+                        {/* タスクヘッダー行 */}
                         <div
                           className="flex items-start justify-between gap-2 p-3 cursor-pointer hover:bg-black/5 transition-colors"
-                          onClick={() =>
-                            setExpandedTaskId(expandedTaskId === task.id ? null : task.id)
-                          }
+                          onClick={() => {
+                            if (editingTaskId === task.id) return; // 編集中はアコーディオン開閉しない
+                            setExpandedTaskId(expandedTaskId === task.id ? null : task.id);
+                          }}
                         >
                           <div className="flex items-center gap-1.5 flex-1 min-w-0">
                             {task.is_long_term && (
@@ -501,6 +563,19 @@ export default function DashboardPage() {
                             >
                               {updating === task.id ? "..." : STATUS_LABELS[task.status]}
                             </button>
+                            {/* 編集ボタン */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                editingTaskId === task.id
+                                  ? setEditingTaskId(null)
+                                  : openEditTask(task);
+                              }}
+                              className="text-gray-300 hover:text-primary-500 transition-colors"
+                              title="編集"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                             {expandedTaskId === task.id ? (
                               <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
                             ) : (
@@ -508,30 +583,147 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
+
+                        {/* 展開エリア：編集フォーム or 詳細表示 */}
                         {expandedTaskId === task.id && (
-                          <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-1.5">
-                            {task.description && (
-                              <p className="text-xs text-gray-600 whitespace-pre-wrap">
-                                {task.description}
-                              </p>
+                          <div className="border-t border-gray-100">
+                            {editingTaskId === task.id ? (
+                              /* 編集フォーム */
+                              <div className="px-3 pb-3 pt-3 space-y-2">
+                                {editError && (
+                                  <p className="text-red-500 text-xs">{editError}</p>
+                                )}
+                                {/* タスク名 */}
+                                <input
+                                  value={editTitle}
+                                  onChange={(e) => setEditTitle(e.target.value)}
+                                  placeholder="タスク名 *"
+                                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
+                                />
+                                {/* 詳細 */}
+                                <textarea
+                                  value={editDescription}
+                                  onChange={(e) => setEditDescription(e.target.value)}
+                                  placeholder="詳細（任意）"
+                                  rows={2}
+                                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  {/* ステータス */}
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">ステータス</label>
+                                    <select
+                                      value={editStatus}
+                                      onChange={(e) => setEditStatus(e.target.value as TaskStatus)}
+                                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-400"
+                                    >
+                                      <option value="open">未着手</option>
+                                      <option value="in_progress">進行中</option>
+                                      <option value="done">完了</option>
+                                    </select>
+                                  </div>
+                                  {/* 担当者 */}
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">担当者</label>
+                                    {members.filter((m) => m.project_id === editProjectId).length > 0 ? (
+                                      <select
+                                        value={editAssignedTo}
+                                        onChange={(e) => setEditAssignedTo(e.target.value)}
+                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-400"
+                                      >
+                                        <option value="">担当者なし</option>
+                                        {members
+                                          .filter((m) => m.project_id === editProjectId)
+                                          .map((m) => (
+                                            <option key={m.id} value={m.name}>{m.name}</option>
+                                          ))}
+                                      </select>
+                                    ) : (
+                                      <input
+                                        value={editAssignedTo}
+                                        onChange={(e) => setEditAssignedTo(e.target.value)}
+                                        placeholder="担当者名（任意）"
+                                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-400"
+                                      />
+                                    )}
+                                  </div>
+                                  {/* 期限 */}
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">期限</label>
+                                    <input
+                                      type="date"
+                                      value={editDueDate}
+                                      onChange={(e) => setEditDueDate(e.target.value)}
+                                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-400"
+                                    />
+                                  </div>
+                                  {/* 長期タスク */}
+                                  <div>
+                                    <label className="block text-xs text-gray-500 mb-1">長期タスク</label>
+                                    <button
+                                      onClick={() => setEditIsLongTerm((v) => !v)}
+                                      className={cn(
+                                        "flex items-center gap-1.5 w-full px-2 py-1.5 rounded-lg text-xs border transition-colors",
+                                        editIsLongTerm
+                                          ? "bg-orange-50 border-orange-300 text-orange-600"
+                                          : "bg-gray-50 border-gray-200 text-gray-400"
+                                      )}
+                                    >
+                                      <Timer className="w-3 h-3" />
+                                      {editIsLongTerm ? "長期タスク" : "通常タスク"}
+                                    </button>
+                                  </div>
+                                </div>
+                                {/* 保存・キャンセル */}
+                                <div className="flex justify-end gap-2 pt-1">
+                                  <button
+                                    onClick={() => setEditingTaskId(null)}
+                                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+                                  >
+                                    キャンセル
+                                  </button>
+                                  <button
+                                    onClick={handleUpdateTask}
+                                    disabled={editSaving}
+                                    className={cn(
+                                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                      editSaving
+                                        ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                        : "bg-primary-600 text-white hover:bg-primary-700"
+                                    )}
+                                  >
+                                    {editSaving && <Loader2 className="w-3 h-3 animate-spin" />}
+                                    保存
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              /* 詳細表示 */
+                              <div className="px-3 pb-3 pt-2 space-y-1.5">
+                                {task.description && (
+                                  <p className="text-xs text-gray-600 whitespace-pre-wrap">
+                                    {task.description}
+                                  </p>
+                                )}
+                                <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+                                  {task.assigned_to && (
+                                    <span className="flex items-center gap-1">
+                                      <User className="w-3 h-3" />
+                                      {task.assigned_to}
+                                    </span>
+                                  )}
+                                  {task.due_date && (
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="w-3 h-3" />
+                                      {task.due_date}
+                                    </span>
+                                  )}
+                                  {!task.description && !task.assigned_to && !task.due_date && (
+                                    <span className="text-gray-300">詳細情報なし</span>
+                                  )}
+                                </div>
+                              </div>
                             )}
-                            <div className="flex flex-wrap gap-3 text-xs text-gray-400">
-                              {task.assigned_to && (
-                                <span className="flex items-center gap-1">
-                                  <User className="w-3 h-3" />
-                                  {task.assigned_to}
-                                </span>
-                              )}
-                              {task.due_date && (
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  {task.due_date}
-                                </span>
-                              )}
-                              {!task.description && !task.assigned_to && !task.due_date && (
-                                <span className="text-gray-300">詳細情報なし</span>
-                              )}
-                            </div>
                           </div>
                         )}
                       </div>
