@@ -677,7 +677,7 @@ export default function DashboardPage() {
                                 {/* 保存・キャンセル */}
                                 <div className="flex justify-end gap-2 pt-1">
                                   <button
-                                    onClick={() => setEditingTaskId(null)}
+                                    onClick={() => { setEditingTaskId(null); setExpandedTaskId(null); }}
                                     className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
                                   >
                                     キャンセル
