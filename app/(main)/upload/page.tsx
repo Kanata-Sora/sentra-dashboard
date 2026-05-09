@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { Project, AnalysisResult, TaskStatus, KnowledgeCategory } from "@/types/database";
+import { Project, Member, AnalysisResult, TaskStatus, KnowledgeCategory } from "@/types/database";
 import { cn, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS } from "@/lib/utils";
 import { Upload, FileText, Loader2, CheckCircle, Trash2, Plus, Timer } from "lucide-react";
 import { useEffect } from "react";
@@ -29,6 +29,7 @@ function generateTitle(date: string, projectId: string, projects: Project[]): st
 
 export default function UploadPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [meetingDate, setMeetingDate] = useState<string>(
     new Date().toISOString().split("T")[0]
@@ -47,11 +48,19 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // プロジェクト一覧取得
     supabase
       .from("projects")
       .select("*")
       .order("sort_order")
       .then(({ data }) => setProjects(data || []));
+
+    // メンバー一覧取得
+    supabase
+      .from("members")
+      .select("*")
+      .order("name")
+      .then(({ data }) => setMembers(data || []));
   }, []);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -451,20 +460,44 @@ export default function UploadPage() {
                       rows={2}
                       className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400 resize-none overflow-y-auto max-h-24"
                     />
-                    <input
-                      value={task.assigned_to || ""}
-                      onChange={(e) =>
-                        setEditableTasks((prev) =>
-                          prev.map((t) =>
-                            t._id === task._id
-                              ? { ...t, assigned_to: e.target.value || null }
-                              : t
+                    {/* 担当者：メンバー登録済みならドロップダウン、未登録ならテキスト入力 */}
+                    {members.filter((m) => m.project_id === selectedProjectId).length > 0 ? (
+                      <select
+                        value={task.assigned_to || ""}
+                        onChange={(e) =>
+                          setEditableTasks((prev) =>
+                            prev.map((t) =>
+                              t._id === task._id
+                                ? { ...t, assigned_to: e.target.value || null }
+                                : t
+                            )
                           )
-                        )
-                      }
-                      placeholder="担当者 (任意)"
-                      className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
-                    />
+                        }
+                        className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      >
+                        <option value="">担当者なし</option>
+                        {members
+                          .filter((m) => m.project_id === selectedProjectId)
+                          .map((m) => (
+                            <option key={m.id} value={m.name}>{m.name}</option>
+                          ))}
+                      </select>
+                    ) : (
+                      <input
+                        value={task.assigned_to || ""}
+                        onChange={(e) =>
+                          setEditableTasks((prev) =>
+                            prev.map((t) =>
+                              t._id === task._id
+                                ? { ...t, assigned_to: e.target.value || null }
+                                : t
+                            )
+                          )
+                        }
+                        placeholder="担当者 (任意)"
+                        className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      />
+                    )}
                   </div>
 
                   {/* 3行目：期限（カレンダーピッカー） */}

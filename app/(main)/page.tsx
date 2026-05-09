@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Project, Task, TaskStatus } from "@/types/database";
+import { Project, Task, TaskStatus, Member } from "@/types/database";
 import { cn, STATUS_LABELS, STATUS_COLORS } from "@/lib/utils";
 import {
   RefreshCw,
@@ -27,6 +27,7 @@ const statusOrder: TaskStatus[] = ["in_progress", "open", "done"];
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState<ProjectWithTasks[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -77,11 +78,18 @@ export default function DashboardPage() {
         .order("created_at", { ascending: false });
       if (tError) throw tError;
 
+      const { data: membersData, error: mError } = await supabase
+        .from("members")
+        .select("*")
+        .order("name");
+      if (mError) throw mError;
+
       const merged: ProjectWithTasks[] = (projectsData || []).map((p) => ({
         ...p,
         tasks: (tasksData || []).filter((t) => t.project_id === p.id),
       }));
       setProjects(merged);
+      setMembers(membersData || []);
 
       // フォームのデフォルトプロジェクトを先頭に設定
       if (projectsData && projectsData.length > 0) {
@@ -296,12 +304,27 @@ export default function DashboardPage() {
               {/* 担当者 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">担当者</label>
-                <input
-                  value={formAssignedTo}
-                  onChange={(e) => setFormAssignedTo(e.target.value)}
-                  placeholder="担当者名 (任意)"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                {members.filter((m) => m.project_id === formProjectId).length > 0 ? (
+                  <select
+                    value={formAssignedTo}
+                    onChange={(e) => setFormAssignedTo(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">担当者なし</option>
+                    {members
+                      .filter((m) => m.project_id === formProjectId)
+                      .map((m) => (
+                        <option key={m.id} value={m.name}>{m.name}</option>
+                      ))}
+                  </select>
+                ) : (
+                  <input
+                    value={formAssignedTo}
+                    onChange={(e) => setFormAssignedTo(e.target.value)}
+                    placeholder="担当者名（設定ページでメンバー登録可）"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                )}
               </div>
 
               {/* 期限 */}
@@ -418,9 +441,19 @@ export default function DashboardPage() {
 
                   {/* タスク一覧（完了以外） */}
                   {(() => {
-                    const activeTasks = ["in_progress", "open"].flatMap((status) =>
-                      project.tasks.filter((t) => t.status === status)
-                    );
+                    // 長期タスク優先→担当者名順でソート
+                    const activeTasks = project.tasks
+                      .filter((t) => t.status !== "done")
+                      .sort((a, b) => {
+                        // 1. 長期タスクを先に
+                        if (a.is_long_term !== b.is_long_term) {
+                          return a.is_long_term ? -1 : 1;
+                        }
+                        // 2. 担当者名でソート（未設定は末尾）
+                        const aName = a.assigned_to ?? "￿";
+                        const bName = b.assigned_to ?? "￿";
+                        return aName.localeCompare(bName, "ja");
+                      });
                     const doneTasks = project.tasks.filter((t) => t.status === "done");
                     const isDoneOpen = expandedDoneProjects.has(project.id);
 
