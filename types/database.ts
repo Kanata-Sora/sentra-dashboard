@@ -37,7 +37,8 @@ export interface Task {
   status: TaskStatus;
   assigned_to: string | null;
   due_date: string | null;
-  is_long_term: boolean; // 長期タスクフラグ
+  is_long_term: boolean;      // 長期タスクフラグ
+  completed_at: string | null; // 完了日時（24h後にナレッジへ転送）
   created_at: string;
   updated_at: string;
 }
