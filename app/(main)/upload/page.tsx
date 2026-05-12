@@ -2,8 +2,8 @@
 
 import { useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { Project, Member, AnalysisResult, TaskStatus, KnowledgeCategory } from "@/types/database";
-import { cn, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS } from "@/lib/utils";
+import { Project, Member, AnalysisResult, TaskStatus } from "@/types/database";
+import { cn, STATUS_LABELS, STATUS_COLORS } from "@/lib/utils";
 import { Upload, FileText, Loader2, CheckCircle, Trash2, Plus, Timer } from "lucide-react";
 import { useEffect } from "react";
 
@@ -13,8 +13,6 @@ type EditableTask = AnalysisResult["tasks"][number] & {
   is_long_term: boolean;
   due_date: string | null;
 };
-
-type EditableKnowledge = AnalysisResult["knowledge"][number] & { _id: string };
 
 function generateId() {
   return Math.random().toString(36).slice(2);
@@ -42,7 +40,6 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [editableTasks, setEditableTasks] = useState<EditableTask[]>([]);
-  const [editableKnowledge, setEditableKnowledge] = useState<EditableKnowledge[]>([]);
   const [hasResult, setHasResult] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,12 +110,6 @@ export default function UploadPage() {
           due_date: null,
         }))
       );
-      setEditableKnowledge(
-        (data.knowledge || []).map((k: AnalysisResult["knowledge"][number]) => ({
-          ...k,
-          _id: generateId(),
-        }))
-      );
       setHasResult(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "解析に失敗しました");
@@ -154,7 +145,7 @@ export default function UploadPage() {
 
       if (!projectId) {
         setError(
-          "タスク・ナレッジ保存にはプロジェクトを選択してください（「全体会議」は議事録のみ保存されます）"
+          "タスク保存にはプロジェクトを選択してください（「全体会議」は議事録のみ保存されます）"
         );
         setSaved(true);
         setSaving(false);
@@ -177,24 +168,9 @@ export default function UploadPage() {
         if (tError) throw tError;
       }
 
-      // ナレッジを保存
-      if (editableKnowledge.length > 0) {
-        const knowledgeToInsert = editableKnowledge.map((k) => ({
-          project_id: projectId,
-          minute_id: minuteId,
-          title: k.title,
-          content: k.content,
-          category: k.category,
-          tags: k.tags,
-        }));
-        const { error: kError } = await supabase.from("knowledge").insert(knowledgeToInsert);
-        if (kError) throw kError;
-      }
-
       setSaved(true);
       setHasResult(false);
       setEditableTasks([]);
-      setEditableKnowledge([]);
       setRawText("");
       setFileName(null);
     } catch (e) {
@@ -209,7 +185,7 @@ export default function UploadPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">議事録アップロード</h1>
         <p className="text-gray-500 text-sm mt-1">
-          議事録をアップロードして、タスクとナレッジを自動抽出します
+          議事録をアップロードして、タスクを自動抽出します
         </p>
       </div>
 
@@ -518,121 +494,6 @@ export default function UploadPage() {
                       className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
                     />
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ナレッジ */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900">
-                抽出されたナレッジ ({editableKnowledge.length}件)
-              </h2>
-              <button
-                onClick={() =>
-                  setEditableKnowledge((prev) => [
-                    ...prev,
-                    {
-                      _id: generateId(),
-                      title: "",
-                      content: "",
-                      category: "other",
-                      tags: [],
-                    },
-                  ])
-                }
-                className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                追加
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {editableKnowledge.map((k) => (
-                <div
-                  key={k._id}
-                  className="border border-gray-100 rounded-lg p-3 space-y-2"
-                >
-                  <div className="flex gap-2">
-                    <input
-                      value={k.title}
-                      onChange={(e) =>
-                        setEditableKnowledge((prev) =>
-                          prev.map((item) =>
-                            item._id === k._id ? { ...item, title: e.target.value } : item
-                          )
-                        )
-                      }
-                      placeholder="タイトル"
-                      className="flex-1 border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
-                    />
-                    <select
-                      value={k.category}
-                      onChange={(e) =>
-                        setEditableKnowledge((prev) =>
-                          prev.map((item) =>
-                            item._id === k._id
-                              ? { ...item, category: e.target.value as KnowledgeCategory }
-                              : item
-                          )
-                        )
-                      }
-                      className={cn(
-                        "text-xs px-2 py-1 rounded-full border-0 font-medium focus:outline-none",
-                        CATEGORY_COLORS[k.category]
-                      )}
-                    >
-                      <option value="technical">技術</option>
-                      <option value="decision">決定事項</option>
-                      <option value="issue">課題</option>
-                      <option value="other">その他</option>
-                    </select>
-                    <button
-                      onClick={() =>
-                        setEditableKnowledge((prev) =>
-                          prev.filter((item) => item._id !== k._id)
-                        )
-                      }
-                      className="text-gray-300 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <textarea
-                    value={k.content}
-                    onChange={(e) =>
-                      setEditableKnowledge((prev) =>
-                        prev.map((item) =>
-                          item._id === k._id ? { ...item, content: e.target.value } : item
-                        )
-                      )
-                    }
-                    placeholder="内容"
-                    rows={2}
-                    className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
-                  />
-                  <input
-                    value={(k.tags || []).join(", ")}
-                    onChange={(e) =>
-                      setEditableKnowledge((prev) =>
-                        prev.map((item) =>
-                          item._id === k._id
-                            ? {
-                                ...item,
-                                tags: e.target.value
-                                  .split(",")
-                                  .map((t) => t.trim())
-                                  .filter(Boolean),
-                              }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="タグ (カンマ区切り)"
-                    className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
-                  />
                 </div>
               ))}
             </div>

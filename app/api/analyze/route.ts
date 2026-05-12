@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     }
 
     const prompt = `あなたはプロジェクト管理アシスタントです。
-以下の議事録テキストを分析し、JSON形式で構造化してください。
+以下の議事録テキストを分析し、JSON形式でタスクを抽出してください。
 
 対象プロジェクト: ${project_name || "不明"}
 
@@ -25,20 +25,11 @@ export async function POST(req: NextRequest) {
       "status": "done | in_progress | open",
       "assigned_to": "担当者名（不明なら null）"
     }
-  ],
-  "knowledge": [
-    {
-      "title": "知見のタイトル",
-      "content": "知見の詳細内容",
-      "category": "technical | decision | issue | other",
-      "tags": ["タグ1", "タグ2"]
-    }
   ]
 }
 
 ## ルール
 - tasksには、完了したこと・進行中のこと・次にすべきことを含める
-- knowledgeには、技術的な知見・ツール・手法の選定理由・判断・制約事項・重要な意思決定とその理由を含める
 - 議事録から読み取れる情報のみ抽出し、推測で補完しないこと
 
 ## 議事録テキスト
@@ -54,7 +45,6 @@ ${raw_text}`;
       // JSONパース失敗時はフォールバック
       return NextResponse.json({
         tasks: [],
-        knowledge: [],
         raw_response: result,
         parse_error: true,
       });

@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { Knowledge, Project, KnowledgeCategory } from "@/types/database";
-import { cn, CATEGORY_LABELS, CATEGORY_COLORS, formatDate } from "@/lib/utils";
+import { Knowledge, Project } from "@/types/database";
+import { cn, formatDate } from "@/lib/utils";
 import {
   Search, Plus, Tag, ChevronDown, ChevronUp, Pencil, Trash2, X,
   Loader2, Sparkles, ChevronLeft, ChevronRight,
@@ -14,14 +14,6 @@ interface KnowledgeWithProject extends Knowledge {
 }
 
 const PAGE_SIZE = 10;
-
-const CATEGORIES: Array<{ value: KnowledgeCategory | "all"; label: string }> = [
-  { value: "all", label: "すべて" },
-  { value: "technical", label: "技術" },
-  { value: "decision", label: "決定事項" },
-  { value: "issue", label: "課題" },
-  { value: "other", label: "その他" },
-];
 
 export default function KnowledgePage() {
   // 一覧表示用の状態
@@ -34,7 +26,6 @@ export default function KnowledgePage() {
   // フィルター
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<KnowledgeCategory | "all">("all");
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
 
   // アコーディオン・フォーム
@@ -47,7 +38,6 @@ export default function KnowledgePage() {
   // フォーム状態
   const [formTitle, setFormTitle] = useState("");
   const [formContent, setFormContent] = useState("");
-  const [formCategory, setFormCategory] = useState<KnowledgeCategory>("other");
   const [formTags, setFormTags] = useState("");
   const [formProjectId, setFormProjectId] = useState("");
 
@@ -70,7 +60,6 @@ export default function KnowledgePage() {
         .order("created_at", { ascending: false })
         .range(from, to);
 
-      if (selectedCategory !== "all") query = query.eq("category", selectedCategory);
       if (selectedProjectId !== "all") query = query.eq("project_id", selectedProjectId);
       if (searchQuery) {
         query = query.or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`);
@@ -82,13 +71,13 @@ export default function KnowledgePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory, selectedProjectId, searchQuery]);
+  }, [selectedProjectId, searchQuery]);
 
   // フィルター変更時はページ1に戻って再取得
   useEffect(() => {
     setPage(1);
     fetchData(1);
-  }, [selectedCategory, selectedProjectId, searchQuery]);
+  }, [selectedProjectId, searchQuery]);
 
   // ページ変更時に再取得
   useEffect(() => {
@@ -143,7 +132,6 @@ export default function KnowledgePage() {
     setEditingItem(null);
     setFormTitle("");
     setFormContent("");
-    setFormCategory("other");
     setFormTags("");
     setFormProjectId(projects[0]?.id || "");
     setShowForm(true);
@@ -153,7 +141,6 @@ export default function KnowledgePage() {
     setEditingItem(item);
     setFormTitle(item.title);
     setFormContent(item.content);
-    setFormCategory(item.category || "other");
     setFormTags((item.tags || []).join(", "));
     setFormProjectId(item.project_id);
     setShowForm(true);
@@ -170,7 +157,6 @@ export default function KnowledgePage() {
       const payload = {
         title: formTitle,
         content: formContent,
-        category: formCategory,
         tags: formTags.split(",").map((t) => t.trim()).filter(Boolean),
         project_id: formProjectId,
       };
@@ -201,7 +187,7 @@ export default function KnowledgePage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">ナレッジベース</h1>
-          <p className="text-gray-500 text-sm mt-1">議事録から抽出された知見・決定事項を管理します</p>
+          <p className="text-gray-500 text-sm mt-1">完了したタスクや議事録からの知見を管理します</p>
         </div>
         <button
           onClick={openNewForm}
@@ -299,24 +285,6 @@ export default function KnowledgePage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-
-          {/* カテゴリフィルター */}
-          <div className="flex gap-1">
-            {CATEGORIES.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setSelectedCategory(value)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                  selectedCategory === value
-                    ? "bg-primary-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -333,33 +301,21 @@ export default function KnowledgePage() {
           </div>
           {error && <div className="mb-4 text-red-600 text-sm">{error}</div>}
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-                placeholder="タイトル *"
-                className="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <select
-                value={formCategory}
-                onChange={(e) => setFormCategory(e.target.value as KnowledgeCategory)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="technical">技術</option>
-                <option value="decision">決定事項</option>
-                <option value="issue">課題</option>
-                <option value="other">その他</option>
-              </select>
-              <select
-                value={formProjectId}
-                onChange={(e) => setFormProjectId(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
+            <input
+              value={formTitle}
+              onChange={(e) => setFormTitle(e.target.value)}
+              placeholder="タイトル *"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <select
+              value={formProjectId}
+              onChange={(e) => setFormProjectId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
             <textarea
               value={formContent}
               onChange={(e) => setFormContent(e.target.value)}
@@ -414,9 +370,7 @@ export default function KnowledgePage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", CATEGORY_COLORS[item.category || "other"])}>
-                          {CATEGORY_LABELS[item.category || "other"]}
-                        </span>
+                        {/* プロジェクトバッジ */}
                         {item.projects && (
                           <span
                             className="text-xs px-2 py-0.5 rounded-full font-medium text-white"
