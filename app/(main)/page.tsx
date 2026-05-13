@@ -25,11 +25,13 @@ interface ProjectWithTasks extends Project {
   tasks: Task[];
 }
 
-// 完了から何時間後にナレッジへ転送されるかを計算
-function getRemainingHours(completedAt: string | null): number {
+// 完了から何分後にナレッジへ転送されるかを計算（残留時間：1分）
+const DONE_RETENTION_MS = 1 * 60 * 1000; // 1分
+
+function getRemainingMinutes(completedAt: string | null): number {
   if (!completedAt) return 0;
-  const expiresAt = new Date(completedAt).getTime() + 24 * 60 * 60 * 1000;
-  return Math.max(0, Math.ceil((expiresAt - Date.now()) / (1000 * 60 * 60)));
+  const expiresAt = new Date(completedAt).getTime() + DONE_RETENTION_MS;
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / (1000 * 60)));
 }
 
 export default function DashboardPage() {
@@ -133,16 +135,40 @@ export default function DashboardPage() {
     );
   }
 
-  // 24時間経過した完了タスクをナレッジに一括転送（ページ読み込み時に実行）
-  async function migrateDoneTasks() {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  // 現在ダッシュボードに残留している完了タスクをすべて即時転送（一回限りの移行用）
+  async function migrateAllDoneTasks() {
+    const { data: allDoneTasks } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("status", "done");
 
-    // completed_at が null（旧データ）または24h超過のタスクを対象
+    if (!allDoneTasks || allDoneTasks.length === 0) return;
+
+    const knowledgeToInsert = allDoneTasks.map((task: Task) => ({
+      project_id: task.project_id,
+      minute_id: task.minute_id,
+      title: task.title,
+      content: task.description || `「${task.title}」が完了しました。`,
+      tags: [],
+    }));
+
+    await supabase.from("knowledge").insert(knowledgeToInsert);
+    await supabase
+      .from("tasks")
+      .delete()
+      .in("id", allDoneTasks.map((t: Task) => t.id));
+  }
+
+  // 残留時間（1分）を超えた完了タスクをナレッジに一括転送（ページ読み込み時に実行）
+  async function migrateDoneTasks() {
+    const thresholdTime = new Date(Date.now() - DONE_RETENTION_MS).toISOString();
+
+    // completed_at が null（旧データ）または1分超過のタスクを対象
     const { data: expiredTasks } = await supabase
       .from("tasks")
       .select("*")
       .eq("status", "done")
-      .or(`completed_at.is.null,completed_at.lte.${twentyFourHoursAgo}`);
+      .or(`completed_at.is.null,completed_at.lte.${thresholdTime}`);
 
     if (!expiredTasks || expiredTasks.length === 0) return;
 
@@ -311,7 +337,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function init() {
-      // 24h経過した完了タスクをナレッジに移行してからデータ取得
+      // 現在残留中の完了タスクをすべて即時転送（初回のみ）
+      await migrateAllDoneTasks();
+      // 以降は1分超過のタスクを転送
       await migrateDoneTasks();
       await fetchData();
     }
@@ -566,7 +594,7 @@ export default function DashboardPage() {
                     ) : (
                       sortedTasks.map((task) => {
                         const isDone = task.status === "done";
-                        const remainingHours = isDone ? getRemainingHours(task.completed_at) : null;
+                        const remainingMinutes = isDone ? getRemainingMinutes(task.completed_at) : null;
 
                         return (
                           <div
@@ -604,13 +632,13 @@ export default function DashboardPage() {
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 {/* 完了後のカウントダウンバッジ */}
-                                {isDone && remainingHours !== null && (
+                                {isDone && remainingMinutes !== null && (
                                   <span
                                     className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-600 font-medium"
                                     title="この時間後にナレッジベースへ自動転送されます"
                                   >
                                     <Library className="w-3 h-3" />
-                                    あと{remainingHours}h
+                                    {remainingMinutes > 0 ? `あと${remainingMinutes}分` : "まもなく転送"}
                                   </span>
                                 )}
                                 {/* ステータスバッジ（クリックで変更） */}
