@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getTeamSession } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Upload, Library, ScrollText, Settings } from "lucide-react";
+import { LayoutDashboard, Upload, Library, ScrollText, Settings, LogOut } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "ダッシュボード", icon: LayoutDashboard },
@@ -15,6 +17,16 @@ const navItems = [
 
 export default function Header() {
   const pathname = usePathname();
+  const [teamName, setTeamName] = useState("");
+
+  useEffect(() => {
+    getTeamSession().then((session) => setTeamName(session?.team.name ?? ""));
+  }, []);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -22,9 +34,9 @@ export default function Header() {
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">S</span>
+              <span className="text-white font-bold text-sm">{teamName.charAt(0)}</span>
             </div>
-            <span className="font-bold text-gray-900 text-lg">SENTRA Dashboard</span>
+            <span className="font-bold text-gray-900 text-lg">{teamName}</span>
           </Link>
 
           <nav className="flex items-center gap-1">
@@ -43,6 +55,14 @@ export default function Header() {
                 {label}
               </Link>
             ))}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              ログアウト
+            </button>
           </nav>
         </div>
       </div>

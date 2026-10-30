@@ -89,7 +89,18 @@ git push -u origin main
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local` の値をコピー |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` の値をコピー |
 | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` の値をコピー |
-| `ANTHROPIC_API_KEY` | `.env.local` の値をコピー |
+| `LLM_API_KEY` | `.env.local` の値をコピー（Gemini APIキー） |
+| `TEAM_PASSWORD_KOCHI_POLICE` | 高知県警のログインパスワード |
+| `TEAM_PASSWORD_KIKAGAKU` | キカガクのログインパスワード |
+
+> パスワードは公開リポジトリに含めないこと。変更するときは環境変数を書き換えて再デプロイします。
+> 既存のログイン状態は最長7日間残ります。すぐに無効化したい場合は `team_sessions` の該当行を削除します。
+
+### 班ごとのデータ分離（初回のみ）
+
+Supabaseの SQL Editor で `supabase_multi_team.sql` を1回実行します。
+既存データはすべて「高知県警」に割り当てられます。実行後は新しいコードでないとデータを読めないため、
+続けてデプロイまで行ってください。
 
 4. `Deploy` ボタンを押す → 数分でURLが発行される
 
@@ -110,4 +121,4 @@ git push
 | `npm run dev` でエラー | `cd $HOME\sentra-dashboard` で正しいフォルダか確認 |
 | ブラウザが真っ白 | PowerShellのエラーメッセージを確認 |
 | データが表示されない | `.env.local` のSupabase設定を確認 |
-| AI解析エラーが出る | `.env.local` の `ANTHROPIC_API_KEY` を確認 |
+| AI解析エラーが出る | `.env.local` の `LLM_API_KEY`（Gemini APIキー）を確認 |

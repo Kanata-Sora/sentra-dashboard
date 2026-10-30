@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SENTRA Dashboard",
-  description: "SENTRAプロジェクトの進捗・成果を可視化するダッシュボード",
+  title: "Team Dashboard",
+  description: "班ごとの進捗・成果を可視化するダッシュボード",
 };
 
 export default function RootLayout({

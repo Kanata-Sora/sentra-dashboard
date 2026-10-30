@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getTeamFromRequest, unauthorized } from "@/lib/auth";
 import { callLLM } from "@/lib/llm";
 import { AnalysisResult } from "@/types/database";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!(await getTeamFromRequest(req))) return unauthorized();
+
     const { raw_text, project_name } = await req.json();
 
     if (!raw_text || typeof raw_text !== "string") {
@@ -36,7 +39,8 @@ export async function POST(req: NextRequest) {
 
 ${raw_text}`;
 
-    const result = await callLLM(prompt);
+    // JSON出力モードを要求して抽出結果の安定性を高める
+    const result = await callLLM(prompt, { json: true });
 
     let parsed: AnalysisResult;
     try {

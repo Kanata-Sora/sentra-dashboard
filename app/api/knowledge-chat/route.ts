@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getTeamFromRequest, unauthorized } from "@/lib/auth";
 import { callLLM } from "@/lib/llm";
 import { Knowledge } from "@/types/database";
 
 export async function POST(req: NextRequest) {
   try {
+    const team = await getTeamFromRequest(req);
+    if (!team) return unauthorized();
+
     const { query, knowledge }: { query: string; knowledge: Knowledge[] } = await req.json();
 
     if (!query || typeof query !== "string") {
@@ -24,7 +28,7 @@ export async function POST(req: NextRequest) {
       })
       .join("\n\n---\n\n");
 
-    const prompt = `あなたはSENTRAプロジェクト（大学のサイバーセキュリティ活動）の知識ベースアシスタントです。
+    const prompt = `あなたは「${team.name}」の知識ベースアシスタントです。
 以下のナレッジベースに蓄積された情報をもとに、ユーザーの質問・依頼に答えてください。
 
 ## ナレッジベース（${knowledge.length}件）
